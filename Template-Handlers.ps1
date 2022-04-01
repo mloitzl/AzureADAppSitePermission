@@ -1,4 +1,8 @@
-Connect-PnPOnline -Url "https://<Tenant>.sharepoint.com/sites/site" -Tenant <Tenant>.onmicrosoft.com -ClientId "<ClientId>" -CertificatePassword (ConvertTo-SecureString -String "<YourPassword>" -AsPlainText -Force) -CertificateBase64Encoded "<Base64EncodedClientCertificate>"
+Connect-PnPOnline -Url "https://<Tenant>.sharepoint.com/sites/site" `
+    -Tenant <Tenant>.onmicrosoft.com `
+    -ClientId "<ClientId>" `
+    -CertificatePassword (ConvertTo-SecureString -String "<YourPassword>" -AsPlainText -Force) `
+    -CertificateBase64Encoded "<Base64EncodedClientCertificate>"
 
 @(
     "ApplicationLifecycleManagement",
