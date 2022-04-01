@@ -130,10 +130,11 @@ var grantPostRequest = new ApiRequest(
             IgnoreNullValues = true
         }));
 
+var grantResult = await context.Team.ExecuteRequestAsync(grantPostRequest);
+
 ///
 /// Get permissions
 ///
-var grantResult = await context.Team.ExecuteRequestAsync(grantPostRequest);
 if (!string.IsNullOrEmpty(grantResult.Response))
 {
     var grantGetResult =
