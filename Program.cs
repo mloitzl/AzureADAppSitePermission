@@ -3,6 +3,7 @@ using System.Text.Json;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using PnP.Core.Auth.Services.Builder.Configuration;
 using PnP.Core.Services;
 using PnP.Core.Services.Builder.Configuration;
@@ -53,6 +54,7 @@ var host = Host.CreateDefaultBuilder()
                     });
             });
     })
+    .ConfigureLogging(builder => builder.AddConsole())
     .UseConsoleLifetime()
     .Build();
 
@@ -60,9 +62,12 @@ await host.StartAsync();
 
 using var scope = host.Services.CreateScope();
 
+var log = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+
 var uri = new Uri("https://loitzl.sharepoint.com/sites/11dfa94d");
 
-var permissions = new[] { "Write", "FullControl" };
+var writePermission = new[] { "Write" };
+var fullControlPermission = new[] { "FullControl" };
 
 var appId = "72c73f9e-a789-44ba-b731-d0971c04df44"; // PoC.SiteCollectionCreationPermissions
 
@@ -103,9 +108,9 @@ if (siteId == Guid.Empty) Environment.Exit(1);
 /// App Permission: https://graph.microsoft.com/Sites.FullControl.All               😬
 /// App Permission: https://microsoft.sharepoint-df.com/Sites.FullControl.All       😬
 /// 
-var payload = new
+var postPayload = new
 {
-    roles = permissions.Select(p => p.ToLower()).ToArray(),
+    roles = writePermission.Select(p => p.ToLower()).ToArray(),
     grantedToIdentities = new[]
     {
         new
@@ -124,20 +129,82 @@ var grantPostRequest = new ApiRequest(
     ApiRequestType.Graph,
     $"sites/{siteId}/permissions",
     JsonSerializer.Serialize(
-        payload,
+        postPayload,
         new JsonSerializerOptions
         {
             IgnoreNullValues = true
         }));
 
-var grantResult = await context.Team.ExecuteRequestAsync(grantPostRequest);
+var grantPostResult = await context.Team.ExecuteRequestAsync(grantPostRequest);
+
+var permissionId = string.Empty;
 
 ///
 /// Get permissions
 ///
-if (!string.IsNullOrEmpty(grantResult.Response))
+if (!string.IsNullOrEmpty(grantPostResult.Response))
 {
+    Console.WriteLine(IndentJson(grantPostResult.Response));
+    
+    permissionId = JsonSerializer.Deserialize<JsonElement>(grantPostResult.Response).GetProperty("id").GetString();
+    
     var grantGetResult =
         await context.Team.ExecuteRequestAsync(new ApiRequest(ApiRequestType.Graph, $"sites/{siteId}/permissions"));
-    Console.WriteLine(JsonSerializer.Serialize(grantResult.Response));
+
+    Console.WriteLine(IndentJson(grantGetResult.Response));
 }
+
+if(string.IsNullOrWhiteSpace(permissionId)) Environment.Exit(1);
+
+///
+/// Grant SiteId with permissions (from: SetPnPAzureADAppSitePermission.ExecuteCmdlet)
+///
+
+var putPayload = new
+{
+    roles = fullControlPermission.Select(p => p.ToLower()).ToArray()
+};
+
+var grantPatchRequest = new ApiRequest(
+    HttpMethod.Patch,
+    ApiRequestType.Graph,
+    $"sites/{siteId}/permissions/{permissionId}",
+    JsonSerializer.Serialize(
+        putPayload,
+        new JsonSerializerOptions
+        {
+            IgnoreNullValues = true
+        }));
+
+var grantPatchResult = await context.Team.ExecuteRequestAsync(grantPatchRequest);
+
+///
+/// Get permissions
+///
+
+if (!string.IsNullOrEmpty(grantPatchResult.Response))
+{
+    Console.WriteLine(IndentJson(grantPatchResult.Response));
+    
+    var grantGetResult =
+        await context.Team.ExecuteRequestAsync(new ApiRequest(ApiRequestType.Graph, $"sites/{siteId}/permissions"));
+
+    Console.WriteLine(IndentJson(grantGetResult.Response));
+}
+
+
+
+#region [ Helper ]
+
+string IndentJson(string @string)
+{
+    return JsonSerializer
+        .Serialize(
+            JsonSerializer.Deserialize<JsonElement>(@string),
+            new JsonSerializerOptions
+            {
+                WriteIndented = true
+            });
+}
+
+#endregion
